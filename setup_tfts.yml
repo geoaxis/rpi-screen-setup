@@ -1,0 +1,67 @@
+---
+- name: Setup TFT playbook
+  hosts: rpi-tfts
+  become: yes
+  become_user: root
+
+  vars:
+    packages:
+      - {package: "libts-bin", state: "present" }
+      - {package: "qt4-x11", state: "build-dep" }
+      - {package: "libqt5gui5", state: "build-dep" }
+      - {package: "libudev-dev", state: "present" }
+      - {package: "libinput-dev", state: "present" } 
+      - {package: "libts-dev", state: "present" } 
+      - {package: "libxcb-xinerama0-dev", state: "present" } 
+      - {package: "libxcb-xinerama0", state: "present" }
+      - {package: "gldriver-test", state: "present" }
+
+  tasks:
+    - name: Add deb sources
+      apt_repository:
+        repo: deb-src http://raspbian.raspberrypi.org/raspbian/ buster main contrib non-free rpi
+        state: present
+      tags:
+        debupdate
+
+    - name: Update apt repo and cache on rpi boxes
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+      tags:
+        debupdate
+
+    - name: Upgrade all packages on rpi boxes
+      apt: upgrade=dist force_apt_get=yes
+      tags:
+        debupdate
+
+    - name: Check if a reboot is needed on rpi boxes
+      register: reboot_required_file
+      stat: path=/var/run/reboot-required get_md5=no
+      tags:
+        debupdate
+
+    - name: Reboot the box if kernel updated
+      reboot:
+        msg: "Reboot initiated by Ansible for kernel updates"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when: reboot_required_file.stat.exists
+      tags:
+        debupdate   
+
+    - name : install package
+      package: state={{item.state}}  name={{item.package}} 
+      with_items: "{{ packages}}" 
+      tags:
+        - packages
+
+    - name: Download adafrit-pift.sh
+      get_url:
+        url: https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/adafruit-pitft.sh
+        dest: /root/adafruit-pitft.sh
+        mode: '0700'
+      tags:
+        - piftscript
